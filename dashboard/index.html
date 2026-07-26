@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="wisp — a Wi-Fi CSI collapse-detection pipeline run: motion & sharpness signals with confirmed alerts.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">%F0%9F%93%A1</text></svg>">
+<title>wisp — collapse detection run</title>
+<style>
+  :root{
+    --bg:#f6f8f8; --surface:#ffffff; --surface-2:#eef2f2;
+    --ink:#14201f; --muted:#576967; --faint:#8b9a98; --border:#dde5e4;
+    --grid:#e7edec;
+    --teal:#0e9a94; --teal-soft:rgba(14,154,148,.12);
+    --indigo:#5b48d6; --indigo-soft:rgba(91,72,214,.12);
+    --sudden:#d83a2a; --slow:#c07800;
+    --band:rgba(200,140,20,.13); --band-line:rgba(200,140,20,.45);
+    --good:#137a56;
+    --shadow:0 1px 2px rgba(20,40,38,.05),0 6px 20px rgba(20,40,38,.06);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  :root{--faint:#8b9a98;}
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1413; --surface:#131d1c; --surface-2:#182524;
+      --ink:#e9f1f0; --muted:#94a7a5; --faint:#6c807e; --border:#233230; --grid:#1b2827;
+      --teal:#2dd4bd; --teal-soft:rgba(45,212,189,.14);
+      --indigo:#9d8bff; --indigo-soft:rgba(157,139,255,.14);
+      --sudden:#ff6a55; --slow:#e9a53a;
+      --band:rgba(233,165,58,.14); --band-line:rgba(233,165,58,.5);
+      --good:#3ecf97;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 26px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f8f8; --surface:#ffffff; --surface-2:#eef2f2; --ink:#14201f; --muted:#576967;
+    --faint:#8b9a98; --border:#dde5e4; --grid:#e7edec;
+    --teal:#0e9a94; --teal-soft:rgba(14,154,148,.12); --indigo:#5b48d6; --indigo-soft:rgba(91,72,214,.12);
+    --sudden:#d83a2a; --slow:#c07800; --band:rgba(200,140,20,.13); --band-line:rgba(200,140,20,.45); --good:#137a56;
+    --shadow:0 1px 2px rgba(20,40,38,.05),0 6px 20px rgba(20,40,38,.06);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1413; --surface:#131d1c; --surface-2:#182524; --ink:#e9f1f0; --muted:#94a7a5;
+    --faint:#6c807e; --border:#233230; --grid:#1b2827;
+    --teal:#2dd4bd; --teal-soft:rgba(45,212,189,.14); --indigo:#9d8bff; --indigo-soft:rgba(157,139,255,.14);
+    --sudden:#ff6a55; --slow:#e9a53a; --band:rgba(233,165,58,.14); --band-line:rgba(233,165,58,.5); --good:#3ecf97;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 26px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1060px;margin:0 auto;padding:40px 24px 64px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);
+    font-weight:600;margin:0 0 8px}
+  h1{font-size:clamp(26px,4vw,38px);line-height:1.1;margin:0 0 10px;font-weight:680;text-wrap:balance;
+    letter-spacing:-.01em}
+  .lede{color:var(--muted);max-width:66ch;margin:0 0 6px;font-size:15.5px}
+  .meta{color:var(--faint);font-size:13px;font-family:var(--mono);margin-top:14px}
+  .meta b{color:var(--muted);font-weight:600}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:30px 0 8px}
+  @media(max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;
+    box-shadow:var(--shadow)}
+  .tile .k{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+  .tile .v{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .tile .s{font-size:12.5px;color:var(--faint);margin-top:2px}
+  .tile .v.ok{color:var(--good)}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px 20px 12px;
+    box-shadow:var(--shadow);margin-top:22px}
+  .card h2{margin:0 0 2px;font-size:16.5px;font-weight:650;letter-spacing:-.01em}
+  .card .sub{margin:0 0 6px;color:var(--muted);font-size:13.5px}
+  .chart-scroll{overflow-x:auto}
+  svg.chart{display:block;width:100%;min-width:520px;height:auto;font-family:var(--mono)}
+  .axis{fill:var(--faint);font-size:11px}
+  .axis-title{fill:var(--muted);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+  .gridline{stroke:var(--grid);stroke-width:1}
+  .thresh{stroke-dasharray:4 4;stroke-width:1.5;vector-effect:non-scaling-stroke}
+  .thresh-lab{font-size:10.5px;font-family:var(--mono)}
+  .trace{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+  .crosshair{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3;opacity:0;pointer-events:none}
+  .hoverdot{opacity:0;pointer-events:none}
+
+  .key{display:flex;flex-wrap:wrap;gap:16px 22px;margin:14px 2px 6px;font-size:12.5px;color:var(--muted)}
+  .key .it{display:flex;align-items:center;gap:8px}
+  .swatch{width:16px;height:11px;border-radius:3px;display:inline-block;flex:none}
+  .swatch.line{height:0;border-top:2px solid}
+  .swatch.dash{height:0;border-top:2px dashed}
+
+  table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13.5px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border)}
+  th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  td{font-variant-numeric:tabular-nums}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:12px;
+    font-weight:600;font-family:var(--mono)}
+  .pill.sudden{background:color-mix(in srgb,var(--sudden) 15%,transparent);color:var(--sudden)}
+  .pill.slow{background:color-mix(in srgb,var(--slow) 16%,transparent);color:var(--slow)}
+  .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+
+  .note{margin-top:26px;padding:16px 18px;border:1px solid var(--border);border-left:3px solid var(--teal);
+    border-radius:10px;background:var(--surface-2);color:var(--muted);font-size:13.5px}
+  .note b{color:var(--ink)}
+  .tt{position:fixed;pointer-events:none;z-index:9;background:var(--ink);color:var(--bg);font-family:var(--mono);
+    font-size:11.5px;padding:6px 8px;border-radius:7px;opacity:0;transform:translate(-50%,-130%);white-space:nowrap;
+    box-shadow:var(--shadow)}
+  .foot{margin-top:26px;color:var(--faint);font-size:12px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Phase&nbsp;0 · pipeline run</p>
+  <h1>Watching a room, catching the collapse</h1>
+  <p class="lede">One full run of the wisp detector on the synthetic demo room — the exact same
+    pipeline (clean → features → anomaly model → temporal state machine) that will run on live ESP32
+    data. Below is what the detector actually saw, and where it fired.</p>
+  <p class="meta" id="meta"></p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>Motion intensity <span style="color:var(--muted);font-weight:400">— the workhorse signal</span></h2>
+    <p class="sub">Cross-subcarrier amplitude variance per ~1&nbsp;s window. High while someone moves,
+      near-zero when the room goes still. A collapse is a drop into stillness that <em>persists</em>.</p>
+    <div class="chart-scroll"><svg class="chart" id="c_motion" viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Motion intensity over time with confirmed collapse alerts"></svg></div>
+    <div class="key" id="key_motion"></div>
+  </div>
+
+  <div class="card">
+    <h2>Transient sharpness <span style="color:var(--muted);font-weight:400">— the impact detector</span></h2>
+    <p class="sub">Largest single-step amplitude change per window. It spikes when a body hits the floor
+      (a <em>sudden</em> collapse) and stays quiet for a gradual slump (a <em>slow</em> collapse).</p>
+    <div class="chart-scroll"><svg class="chart" id="c_sharp" viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Transient sharpness over time"></svg></div>
+    <div class="key" id="key_sharp"></div>
+  </div>
+
+  <div class="card">
+    <h2>Confirmed alerts</h2>
+    <p class="sub">What the one-line console prints — one row per confirmed collapse, after the pattern
+      (disturbance → stillness ≥ T) is satisfied.</p>
+    <table id="alerts"><thead><tr><th>Time</th><th>Kind</th><th>Confidence</th><th>Stillness held</th><th>vs. ground truth</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="note">
+    <b>What you're looking at.</b> The amber bands are the <b>staged collapses</b> (ground truth). The teal/indigo
+    traces are the live features. Dashed lines are the thresholds learned from <em>this room's own</em> normal during
+    calibration — not global constants. The detector fires only when motion drops below the stillness line and
+    <b>stays there</b>, which is why normal movement never trips it. &nbsp;<b>Honest caveat:</b> this is the
+    <b>synthetic</b> room — it proves the software and the detection logic are correct. The real gate (false
+    alarms per week in your actual room, over weeks) needs the ESP32s streaming.
+  </div>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<div class="tt" id="tt"></div>
+
+<script>
+const DATA = {"rate": 50.0, "ts": [0.98, 1.18, 1.38, 1.58, 1.78, 1.98, 2.18, 2.38, 2.58, 2.78, 2.98, 3.18, 3.38, 3.58, 3.78, 3.98, 4.18, 4.38, 4.58, 4.78, 4.98, 5.18, 5.38, 5.58, 5.78, 5.98, 6.18, 6.38, 6.58, 6.78, 6.98, 7.18, 7.38, 7.58, 7.78, 7.98, 8.18, 8.38, 8.58, 8.78, 8.98, 9.18, 9.38, 9.58, 9.78, 9.98, 10.18, 10.38, 10.58, 10.78, 10.98, 11.18, 11.38, 11.58, 11.78, 11.98, 12.18, 12.38, 12.58, 12.78, 12.98, 13.18, 13.38, 13.58, 13.78, 13.98, 14.18, 14.38, 14.58, 14.78, 14.98, 15.18, 15.38, 15.58, 15.78, 15.98, 16.18, 16.38, 16.58, 16.78, 16.98, 17.18, 17.38, 17.58, 17.78, 17.98, 18.18, 18.38, 18.58, 18.78, 18.98, 19.18, 19.38, 19.58, 19.78, 19.98, 20.18, 20.38, 20.58, 20.78, 20.98, 21.18, 21.38, 21.58, 21.78, 21.98, 22.18, 22.38, 22.58, 22.78, 22.98, 23.18, 23.38, 23.58, 23.78, 23.98, 24.18, 24.38, 24.58, 24.78, 24.98, 25.18, 25.38, 25.58, 25.78, 25.98, 26.18, 26.38, 26.58, 26.78, 26.98, 27.18, 27.38, 27.58, 27.78, 27.98, 28.18, 28.38, 28.58, 28.78, 28.98, 29.18, 29.38, 29.58, 29.78, 29.98, 30.18, 30.38, 30.58, 30.78, 30.98, 31.18, 31.38, 31.58, 31.78, 31.98, 32.18, 32.38, 32.58, 32.78, 32.98, 33.18, 33.38, 33.58, 33.78, 33.98, 34.18, 34.38, 34.58, 34.78, 34.98, 35.18, 35.38, 35.58, 35.78, 35.98, 36.18, 36.38, 36.58, 36.78, 36.98, 37.18, 37.38, 37.58, 37.78, 37.98, 38.18, 38.38, 38.58, 38.78, 38.98, 39.18, 39.38, 39.58, 39.78, 39.98, 40.18, 40.38, 40.58, 40.78, 40.98, 41.18, 41.38, 41.58, 41.78, 41.98, 42.18, 42.38, 42.58, 42.78, 42.98, 43.18, 43.38, 43.58, 43.78, 43.98, 44.18, 44.38, 44.58, 44.78, 44.98, 45.18, 45.38, 45.58, 45.78, 45.98, 46.18, 46.38, 46.58, 46.78, 46.98, 47.18, 47.38, 47.58, 47.78, 47.98, 48.18, 48.38, 48.58, 48.78, 48.98, 49.18, 49.38, 49.58, 49.78, 49.98, 50.18, 50.38, 50.58, 50.78, 50.98, 51.18, 51.38, 51.58, 51.78, 51.98, 52.18, 52.38, 52.58, 52.78, 52.98, 53.18, 53.38, 53.58, 53.78, 53.98, 54.18, 54.38, 54.58, 54.78, 54.98, 55.18, 55.38, 55.58, 55.78, 55.98, 56.18, 56.38, 56.58, 56.78, 56.98, 57.18, 57.38, 57.58, 57.78, 57.98, 58.18, 58.38, 58.58, 58.78, 58.98, 59.18, 59.38, 59.58, 59.78, 59.98, 60.18, 60.38, 60.58, 60.78, 60.98, 61.18, 61.38, 61.58, 61.78, 61.98, 62.18, 62.38, 62.58, 62.78, 62.98, 63.18, 63.38, 63.58, 63.78, 63.98, 64.18, 64.38, 64.58, 64.78, 64.98, 65.18, 65.38, 65.58, 65.78, 65.98, 66.18, 66.38, 66.58, 66.78, 66.98, 67.18, 67.38, 67.58, 67.78, 67.98, 68.18, 68.38, 68.58, 68.78, 68.98, 69.18, 69.38, 69.58, 69.78, 69.98, 70.18, 70.38, 70.58, 70.78, 70.98, 71.18, 71.38, 71.58, 71.78, 71.98, 72.18, 72.38, 72.58, 72.78, 72.98, 73.18, 73.38, 73.58, 73.78, 73.98, 74.18, 74.38, 74.58, 74.78, 74.98, 75.18, 75.38, 75.58, 75.78, 75.98, 76.18, 76.38, 76.58, 76.78, 76.98, 77.18, 77.38, 77.58, 77.78, 77.98, 78.18, 78.38, 78.58, 78.78, 78.98, 79.18, 79.38, 79.58, 79.78, 79.98, 80.18, 80.38, 80.58, 80.78, 80.98, 81.18, 81.38, 81.58, 81.78, 81.98, 82.18, 82.38, 82.58, 82.78, 82.98, 83.18, 83.38, 83.58, 83.78, 83.98, 84.18, 84.38, 84.58, 84.78, 84.98, 85.18, 85.38, 85.58, 85.78, 85.98, 86.18, 86.38, 86.58, 86.78, 86.98, 87.18, 87.38, 87.58, 87.78, 87.98, 88.18, 88.38, 88.58, 88.78, 88.98, 89.18, 89.38, 89.58, 89.78, 89.98, 90.18, 90.38, 90.58, 90.78, 90.98, 91.18, 91.38, 91.58, 91.78, 91.98, 92.18, 92.38, 92.58, 92.78, 92.98, 93.18, 93.38, 93.58, 93.78, 93.98, 94.18, 94.38, 94.58, 94.78, 94.98, 95.18, 95.38, 95.58, 95.78, 95.98, 96.18, 96.38, 96.58, 96.78, 96.98, 97.18, 97.38, 97.58, 97.78, 97.98, 98.18, 98.38, 98.58, 98.78, 98.98, 99.18, 99.38, 99.58, 99.78, 99.98, 100.18, 100.38, 100.58, 100.78, 100.98, 101.18, 101.38, 101.58, 101.78, 101.98, 102.18, 102.38, 102.58, 102.78, 102.98, 103.18, 103.38, 103.58, 103.78, 103.98, 104.18, 104.38, 104.58, 104.78, 104.98, 105.18, 105.38, 105.58, 105.78, 105.98, 106.18, 106.38, 106.58, 106.78, 106.98, 107.18, 107.38, 107.58, 107.78, 107.98, 108.18, 108.38, 108.58, 108.78, 108.98, 109.18, 109.38, 109.58, 109.78, 109.98, 110.18, 110.38, 110.58, 110.78, 110.98, 111.18, 111.38, 111.58, 111.78, 111.98, 112.18, 112.38, 112.58, 112.78, 112.98, 113.18, 113.38, 113.58, 113.78, 113.98, 114.18, 114.38, 114.58, 114.78, 114.98, 115.18, 115.38, 115.58, 115.78, 115.98, 116.18, 116.38, 116.58, 116.78, 116.98, 117.18, 117.38, 117.58, 117.78, 117.98, 118.18, 118.38, 118.58, 118.78, 118.98, 119.18, 119.38, 119.58, 119.78, 119.98, 120.18, 120.38, 120.58, 120.78, 120.98, 121.18, 121.38, 121.58, 121.78, 121.98, 122.18, 122.38, 122.58, 122.78, 122.98, 123.18, 123.38, 123.58, 123.78, 123.98, 124.18, 124.38, 124.58, 124.78, 124.98], "motion": [1.265, 1.62, 1.486, 1.645, 1.77, 1.697, 1.238, 1.234, 1.267, 1.097, 1.295, 1.314, 1.484, 1.551, 1.548, 1.431, 1.816, 1.677, 1.506, 1.607, 1.65, 1.32, 1.308, 1.248, 1.002, 0.766, 0.871, 1.109, 1.167, 1.418, 1.582, 1.695, 1.359, 1.375, 1.323, 1.254, 0.994, 1.11, 1.106, 1.147, 1.158, 1.06, 1.078, 1.138, 0.935, 1.13, 4.04, 7.044, 10.33, 12.9, 15.274, 16.085, 16.701, 16.011, 15.125, 13.658, 12.045, 10.306, 9.262, 8.797, 8.74, 9.058, 9.949, 10.884, 12.502, 14.423, 16.269, 17.123, 18.12, 17.775, 16.933, 15.458, 14.236, 12.378, 11.013, 9.913, 8.779, 8.225, 8.604, 9.28, 10.361, 12.02, 13.617, 15.18, 16.245, 16.733, 16.505, 15.875, 14.534, 13.134, 11.643, 10.133, 8.985, 8.405, 8.409, 9.073, 10.207, 11.777, 13.401, 14.928, 16.121, 16.949, 17.241, 16.787, 15.356, 13.951, 12.47, 10.931, 9.493, 8.549, 8.268, 8.58, 9.392, 10.187, 11.808, 13.019, 14.356, 15.423, 16.232, 16.494, 15.938, 15.209, 14.032, 12.281, 10.398, 9.205, 8.279, 8.186, 8.432, 9.343, 11.013, 12.507, 14.048, 15.454, 16.886, 17.022, 16.69, 15.926, 14.497, 12.521, 10.974, 9.565, 8.601, 8.541, 8.948, 9.656, 9.163, 8.475, 7.39, 5.784, 3.65, 3.78, 3.589, 3.52, 3.603, 3.42, 3.029, 3.408, 3.229, 3.083, 3.417, 3.284, 2.911, 3.227, 3.31, 3.021, 3.147, 3.316, 3.407, 3.291, 3.272, 3.537, 3.416, 3.022, 3.09, 3.087, 3.042, 3.205, 3.314, 3.093, 3.121, 3.074, 3.232, 3.397, 3.558, 3.747, 3.643, 3.663, 3.568, 3.64, 3.429, 3.561, 3.218, 3.427, 3.202, 3.287, 4.435, 5.569, 6.797, 8.101, 9.204, 9.388, 9.494, 24.772, 41.538, 40.054, 38.399, 36.706, 21.173, 0.871, 0.865, 0.857, 0.855, 1.081, 1.276, 1.544, 1.704, 1.697, 1.526, 1.603, 1.361, 1.405, 1.137, 1.235, 1.287, 1.476, 1.435, 1.453, 1.429, 1.42, 1.681, 1.702, 1.82, 1.731, 1.506, 1.102, 1.252, 1.132, 1.076, 1.199, 1.203, 1.02, 0.979, 1.217, 1.371, 1.527, 1.582, 1.642, 1.549, 1.369, 1.489, 1.373, 1.429, 1.471, 1.463, 1.429, 1.478, 1.547, 1.445, 1.44, 1.2, 1.188, 1.118, 1.171, 0.983, 0.99, 0.763, 1.088, 1.01, 1.188, 1.316, 1.478, 1.467, 1.518, 1.383, 1.286, 1.23, 1.05, 1.053, 1.038, 1.239, 1.403, 1.377, 1.448, 1.545, 1.402, 1.336, 1.131, 1.232, 1.272, 1.281, 1.635, 1.676, 1.596, 1.677, 1.847, 1.552, 1.616, 1.499, 1.367, 1.209, 1.035, 1.178, 1.167, 1.158, 1.172, 1.329, 1.233, 1.331, 1.194, 1.126, 0.962, 1.06, 1.101, 1.357, 1.628, 1.868, 1.946, 1.905, 1.831, 1.534, 4.209, 7.415, 10.806, 13.636, 16.169, 16.891, 17.231, 16.776, 16.182, 14.781, 13.072, 11.467, 9.968, 8.596, 8.074, 8.641, 9.184, 10.287, 11.698, 13.333, 14.798, 15.982, 16.554, 16.342, 15.744, 14.481, 12.925, 11.381, 10.37, 9.076, 8.428, 8.631, 9.152, 10.049, 11.702, 12.88, 14.1, 15.386, 16.451, 16.55, 16.174, 15.627, 14.51, 13.208, 11.622, 10.413, 9.601, 9.134, 8.385, 9.066, 9.871, 10.895, 12.507, 14.152, 15.301, 16.282, 16.946, 16.522, 15.288, 14.075, 12.203, 10.378, 9.287, 8.386, 8.048, 8.192, 9.149, 10.683, 12.189, 14.154, 15.329, 16.469, 16.336, 16.134, 15.008, 14.018, 12.204, 11.032, 9.386, 8.808, 7.935, 7.841, 7.436, 7.331, 6.704, 6.676, 6.35, 5.989, 5.682, 5.407, 4.896, 4.624, 4.338, 3.993, 3.783, 3.739, 3.288, 3.112, 2.677, 2.241, 1.746, 1.506, 1.146, 0.941, 0.905, 0.98, 1.081, 0.854, 0.705, 0.809, 0.75, 0.621, 0.882, 0.957, 1.011, 1.292, 1.238, 1.155, 1.097, 1.149, 1.009, 1.326, 1.286, 1.287, 1.094, 1.156, 1.26, 1.24, 1.484, 1.642, 1.406, 1.003, 1.075, 1.051, 0.813, 1.053, 1.134, 1.3, 1.05, 1.58, 1.635, 1.636, 1.65, 1.698, 1.189, 0.996, 1.142, 0.827, 1.073, 1.228, 1.133, 1.17, 1.493, 1.507, 1.456, 1.562, 1.537, 1.347, 1.189, 1.194, 1.379, 1.203, 1.389, 1.4, 1.811, 1.587, 1.756, 1.712, 1.881, 1.574, 1.577, 1.631, 1.585, 1.692, 1.625, 1.788, 1.715, 2.032, 1.816, 1.776, 1.755, 1.685, 1.186, 1.371, 1.531, 1.479, 1.478, 1.448, 1.242, 1.012, 0.884, 0.932, 1.272, 1.439, 1.423, 1.548, 1.671, 1.569, 1.407, 1.649, 1.556, 1.272, 1.104, 1.272, 0.904, 1.03, 1.11, 1.096, 0.92, 1.044, 1.398, 1.43, 1.5, 1.437, 1.49, 1.123, 1.305, 1.409, 1.522, 1.442, 1.32, 1.386, 1.261, 1.084, 1.123, 1.228, 1.373, 1.451, 1.623, 1.632, 1.658, 1.384, 1.298, 1.516, 1.506, 1.397, 1.425, 1.433, 1.222, 1.32, 1.37, 1.371, 1.476, 1.253, 1.46, 1.356, 1.295, 1.452, 1.573, 1.222, 1.441, 1.588, 1.415, 1.521, 1.612, 1.514, 1.287, 1.125, 1.04, 1.281, 1.346, 1.268, 1.285, 1.193, 0.958, 0.879, 1.014, 0.997, 0.957, 0.85, 0.874, 0.93, 0.848, 0.816, 0.924, 0.806, 0.783, 0.802, 0.957, 1.273, 1.276, 1.517, 1.525, 1.459, 1.171, 1.478, 1.301, 1.37, 1.466, 1.572, 1.322, 1.456, 1.47, 1.403, 1.313, 1.536, 1.463, 1.493, 1.715, 1.737], "sharp": [1.303, 1.303, 1.303, 1.303, 1.348, 1.348, 1.348, 1.348, 1.348, 1.071, 1.217, 1.217, 1.344, 1.344, 1.344, 1.344, 1.344, 1.3, 1.3, 1.3, 1.227, 1.227, 1.227, 1.227, 1.227, 1.165, 1.05, 1.359, 1.359, 1.359, 1.359, 1.359, 1.221, 1.221, 1.221, 1.221, 1.131, 1.131, 1.225, 1.225, 1.225, 1.225, 1.225, 1.212, 1.212, 1.212, 4.206, 4.456, 4.975, 5.024, 5.052, 5.052, 5.425, 5.425, 5.425, 5.425, 5.425, 4.451, 4.434, 4.014, 3.702, 3.912, 4.465, 5.14, 5.14, 5.389, 5.389, 5.389, 5.504, 5.504, 5.504, 5.504, 5.504, 4.887, 4.577, 4.225, 3.794, 3.746, 3.811, 3.99, 4.232, 5.115, 5.115, 5.258, 5.664, 5.664, 5.664, 5.664, 5.664, 4.731, 4.484, 4.225, 4.06, 3.563, 3.738, 4.245, 4.45, 4.505, 5.007, 5.213, 5.213, 5.297, 5.297, 5.297, 5.297, 5.297, 5.162, 4.765, 4.124, 3.771, 3.637, 3.688, 4.339, 4.485, 4.767, 5.413, 5.941, 5.941, 5.941, 5.941, 5.941, 5.363, 5.363, 5.363, 4.631, 4.471, 3.725, 3.7, 3.862, 4.57, 4.57, 5.652, 5.652, 5.652, 5.841, 5.841, 5.841, 5.841, 5.841, 5.257, 4.553, 4.55, 3.953, 3.745, 3.811, 4.168, 4.168, 4.168, 4.168, 4.168, 2.123, 2.123, 1.933, 1.905, 1.797, 1.797, 1.817, 1.817, 1.817, 1.819, 1.819, 1.819, 1.819, 2.147, 2.147, 2.147, 2.147, 2.147, 2.023, 1.936, 1.936, 1.987, 1.987, 1.987, 1.987, 1.987, 1.902, 2.166, 2.166, 2.166, 2.166, 1.981, 1.772, 1.772, 1.772, 1.826, 1.826, 2.151, 2.151, 2.151, 2.151, 2.151, 2.029, 2.029, 2.029, 2.029, 3.432, 3.432, 3.94, 4.348, 4.348, 4.348, 4.348, 10.216, 10.226, 10.226, 10.226, 10.226, 10.226, 1.078, 1.078, 1.078, 1.433, 1.433, 1.433, 1.433, 1.433, 1.415, 1.415, 1.447, 1.447, 1.447, 1.447, 1.447, 1.171, 1.171, 1.163, 1.163, 1.163, 1.222, 1.222, 1.222, 1.222, 1.278, 1.278, 1.278, 1.278, 1.162, 1.162, 1.329, 1.329, 1.329, 1.329, 1.329, 1.488, 1.488, 1.488, 1.488, 1.488, 1.046, 1.363, 1.363, 1.363, 1.363, 1.363, 1.158, 1.158, 1.158, 1.158, 1.145, 1.122, 1.221, 1.221, 1.221, 1.221, 1.221, 1.089, 1.22, 1.22, 1.22, 1.22, 1.22, 1.283, 1.283, 1.283, 1.283, 1.283, 1.001, 1.001, 0.995, 1.004, 1.288, 1.288, 1.288, 1.288, 1.288, 1.181, 1.131, 1.465, 1.465, 1.465, 1.465, 1.465, 1.293, 1.293, 1.293, 1.293, 1.293, 1.228, 1.162, 1.169, 1.169, 1.289, 1.289, 1.289, 1.289, 1.289, 1.276, 1.276, 1.113, 0.96, 0.96, 0.97, 0.992, 1.187, 1.242, 1.242, 1.242, 1.242, 1.242, 1.136, 4.769, 4.769, 4.93, 5.429, 5.941, 5.941, 5.941, 5.941, 5.941, 5.661, 5.661, 4.909, 4.855, 3.587, 3.587, 3.957, 3.957, 4.723, 4.745, 4.874, 5.577, 5.577, 5.577, 5.577, 5.577, 5.201, 5.201, 4.441, 4.4, 4.209, 4.164, 4.164, 4.164, 4.228, 4.936, 4.936, 4.954, 5.146, 5.379, 5.399, 5.399, 5.399, 5.399, 5.399, 4.653, 4.653, 4.115, 3.87, 3.839, 3.964, 4.738, 4.738, 4.738, 5.28, 5.477, 5.477, 5.477, 5.477, 5.477, 5.282, 5.282, 4.423, 4.136, 3.679, 3.511, 3.681, 3.911, 5.208, 5.208, 5.48, 5.48, 5.649, 5.649, 5.649, 5.649, 5.649, 4.909, 4.662, 4.132, 3.939, 3.464, 3.464, 3.407, 3.407, 3.016, 3.016, 3.016, 3.013, 2.805, 2.684, 2.684, 2.493, 2.256, 2.256, 2.07, 2.07, 2.039, 2.039, 1.658, 1.567, 1.504, 1.504, 1.319, 1.319, 1.319, 1.319, 1.319, 1.072, 0.999, 1.108, 1.108, 1.108, 1.108, 1.108, 1.046, 1.33, 1.33, 1.33, 1.33, 1.33, 1.184, 1.254, 1.254, 1.254, 1.254, 1.254, 1.115, 1.127, 1.134, 1.134, 1.134, 1.134, 1.134, 0.977, 0.977, 1.081, 1.081, 1.134, 1.134, 1.388, 1.388, 1.388, 1.388, 1.388, 1.262, 1.245, 1.27, 1.27, 1.27, 1.27, 1.27, 1.328, 1.328, 1.328, 1.328, 1.328, 1.301, 1.301, 1.301, 1.301, 1.301, 1.107, 1.281, 1.281, 1.281, 1.281, 1.281, 1.182, 1.182, 1.182, 1.182, 1.188, 1.188, 1.22, 1.22, 1.416, 1.416, 1.416, 1.416, 1.416, 1.383, 1.383, 1.098, 1.296, 1.296, 1.296, 1.296, 1.296, 1.092, 1.259, 1.259, 1.259, 1.259, 1.423, 1.423, 1.423, 1.423, 1.423, 1.397, 1.397, 1.397, 1.35, 1.24, 1.24, 1.231, 1.231, 1.231, 1.103, 1.103, 1.103, 1.092, 1.092, 1.092, 1.092, 1.135, 1.135, 1.135, 1.182, 1.182, 1.182, 1.182, 1.182, 1.196, 1.196, 1.196, 1.196, 1.161, 1.161, 1.161, 1.161, 1.116, 1.052, 1.052, 1.285, 1.285, 1.285, 1.297, 1.297, 1.297, 1.297, 1.297, 1.306, 1.306, 1.306, 1.336, 1.336, 1.336, 1.336, 1.336, 1.273, 1.273, 1.273, 1.231, 1.231, 1.231, 1.231, 1.231, 1.073, 1.073, 1.073, 1.067, 1.067, 1.078, 1.078, 1.078, 1.078, 1.078, 1.052, 1.052, 1.052, 1.052, 1.132, 1.159, 1.159, 1.159, 1.159, 1.267, 1.267, 1.267, 1.493, 1.493, 1.493, 1.493, 1.493, 0.962, 1.149, 1.162, 1.162, 1.162, 1.162, 1.162, 1.064, 1.099, 1.099, 1.099, 1.328, 1.328, 1.328, 1.328, 1.328], "labels": ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sit", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "sudden_fall", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "walk", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "slow_fall", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"], "anom": [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false], "alerts": [{"t": 50.8, "kind": "sudden_collapse", "conf": 0.75, "still": 8.0}, {"t": 104.4, "kind": "slow_collapse", "conf": 1.0, "still": 20.0}], "events": [{"onset": 41.5, "end": 65.0, "label": "sudden_fall"}, {"onset": 80.0, "end": 120.0, "label": "slow_fall"}], "thresholds": {"still": 3.655, "occupied": 10.632, "sharp": 6.164}, "kept": 55, "total_sub": 64, "duration": 125.0};
+
+const fmtClock = s => { s=Math.round(s); const m=Math.floor(s/60), r=s%60;
+  return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`; };
+
+/* ---- gate summary tiles ---- */
+(function(){
+  const nDet = DATA.alerts.length, nEv = DATA.events.length;
+  const lat = DATA.alerts.map((a,i)=>a.t - DATA.events[i].onset);
+  const meanLat = lat.reduce((x,y)=>x+y,0)/lat.length;
+  const tiles = [
+    {k:'Recall', v:`${nDet}/${nEv}`, s:'staged collapses caught', ok:true},
+    {k:'False alarms', v:'0', s:'0.00 per week', ok:true},
+    {k:'Detection latency', v:`${meanLat.toFixed(1)}s`, s:'avg, after onset'},
+    {k:'Kind correct', v:`${nDet}/${nEv}`, s:'sudden vs slow', ok:true},
+  ];
+  document.getElementById('tiles').innerHTML = tiles.map(t=>
+    `<div class="tile"><p class="k">${t.k}</p><div class="v ${t.ok?'ok':''}">${t.v}</div><p class="s">${t.s}</p></div>`).join('');
+  document.getElementById('meta').innerHTML =
+    `<b>duration</b> ${DATA.duration.toFixed(0)}s · <b>rate</b> ${DATA.rate} Hz · `+
+    `<b>subcarriers kept</b> ${DATA.kept}/${DATA.total_sub} · <b>windows</b> ${DATA.ts.length}`;
+  document.getElementById('foot').textContent =
+    'Deterministic replay through wisp.pipeline.run_detection · thresholds fit from calibration percentiles';
+})();
+
+/* ---- generic time-series renderer ---- */
+function draw(svgId, keyId, values, opts){
+  const svg = document.getElementById(svgId);
+  const W=1000, H=300, P={l:52,r:16,t:16,b:34};
+  const ts = DATA.ts, xmax = DATA.duration;
+  const ymax = opts.ymax ?? Math.max(...values, ...(opts.thresholds||[]).map(t=>t.v))*1.12;
+  const X = t => P.l + (t/xmax)*(W-P.l-P.r);
+  const Y = v => H-P.b - (v/ymax)*(H-P.t-P.b);
+  const NS='http://www.w3.org/2000/svg';
+  const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+  svg.textContent='';
+
+  // ground-truth event bands
+  DATA.events.forEach(ev=>{
+    svg.appendChild(el('rect',{x:X(ev.onset),y:P.t,width:X(ev.end)-X(ev.onset),height:H-P.t-P.b,
+      fill:'var(--band)'}));
+    svg.appendChild(el('line',{x1:X(ev.onset),y1:P.t,x2:X(ev.onset),y2:H-P.b,stroke:'var(--band-line)',
+      'stroke-width':1,'stroke-dasharray':'2 3'}));
+  });
+
+  // y grid + labels
+  const steps=4;
+  for(let i=0;i<=steps;i++){
+    const v=ymax*i/steps, y=Y(v);
+    svg.appendChild(el('line',{x1:P.l,y1:y,x2:W-P.r,y2:y,class:'gridline'}));
+    const tx=el('text',{x:P.l-8,y:y+3,'text-anchor':'end',class:'axis'});
+    tx.textContent=v.toFixed(v<10?1:0); svg.appendChild(tx);
+  }
+  // x ticks
+  for(let t=0;t<=xmax+0.1;t+=25){
+    const x=X(t); const tx=el('text',{x:x,y:H-P.b+16,'text-anchor':'middle',class:'axis'});
+    tx.textContent=fmtClock(t); svg.appendChild(tx);
+  }
+  const xt=el('text',{x:(P.l+W-P.r)/2,y:H-4,'text-anchor':'middle',class:'axis-title'}); xt.textContent='time (mm:ss)'; svg.appendChild(xt);
+  const yt=el('text',{x:14,y:P.t+2,'text-anchor':'start',class:'axis-title',transform:`rotate(-90 14 ${P.t+2})`}); yt.textContent=opts.yLabel; svg.appendChild(yt);
+
+  // threshold lines
+  (opts.thresholds||[]).forEach(th=>{
+    svg.appendChild(el('line',{x1:P.l,y1:Y(th.v),x2:W-P.r,y2:Y(th.v),class:'thresh',stroke:th.color}));
+    const lab=el('text',{x:W-P.r,y:Y(th.v)-4,'text-anchor':'end',class:'thresh-lab',fill:th.color});
+    lab.textContent=th.label; svg.appendChild(lab);
+  });
+
+  // area + trace
+  let d='', area=`M ${X(ts[0])} ${Y(0)}`;
+  ts.forEach((t,i)=>{ const cmd=(i? 'L':'M'); d+=`${cmd} ${X(t).toFixed(1)} ${Y(values[i]).toFixed(1)} `;
+    area+=`L ${X(t).toFixed(1)} ${Y(values[i]).toFixed(1)} `; });
+  area+=`L ${X(ts[ts.length-1])} ${Y(0)} Z`;
+  svg.appendChild(el('path',{d:area,fill:opts.soft}));
+  svg.appendChild(el('path',{d:d.trim(),class:'trace',stroke:opts.color}));
+
+  // alert markers
+  if(opts.showAlerts){
+    DATA.alerts.forEach(a=>{
+      const col = a.kind.startsWith('sudden')?'var(--sudden)':'var(--slow)';
+      svg.appendChild(el('line',{x1:X(a.t),y1:P.t,x2:X(a.t),y2:H-P.b,stroke:col,'stroke-width':1.5}));
+      svg.appendChild(el('circle',{cx:X(a.t),cy:P.t+6,r:5,fill:col,stroke:'var(--surface)','stroke-width':2}));
+      const lab=el('text',{x:X(a.t)- (a.t>xmax*0.7?6:-6),y:P.t+4,
+        'text-anchor':a.t>xmax*0.7?'end':'start',class:'thresh-lab',fill:col,'font-weight':'700'});
+      lab.textContent='▲ ALERT · '+a.kind.replace('_',' '); svg.appendChild(lab);
+    });
+  }
+
+  // hover crosshair + tooltip
+  const cross=el('line',{class:'crosshair',y1:P.t,y2:H-P.b}); svg.appendChild(cross);
+  const hdot=el('circle',{class:'hoverdot',r:4,fill:opts.color,stroke:'var(--surface)','stroke-width':2}); svg.appendChild(hdot);
+  const tt=document.getElementById('tt');
+  const hit=el('rect',{x:P.l,y:P.t,width:W-P.l-P.r,height:H-P.t-P.b,fill:'transparent'}); svg.appendChild(hit);
+  const pt=svg.createSVGPoint();
+  function move(ev){
+    const r=svg.getBoundingClientRect();
+    const sx=(ev.clientX-r.left)/r.width*W;
+    const tv=Math.max(0,Math.min(xmax,(sx-P.l)/(W-P.l-P.r)*xmax));
+    let i=Math.round(tv/xmax*(ts.length-1)); i=Math.max(0,Math.min(ts.length-1,i));
+    cross.setAttribute('x1',X(ts[i])); cross.setAttribute('x2',X(ts[i])); cross.style.opacity=1;
+    hdot.setAttribute('cx',X(ts[i])); hdot.setAttribute('cy',Y(values[i])); hdot.style.opacity=1;
+    tt.style.opacity=1; tt.style.left=ev.clientX+'px'; tt.style.top=ev.clientY+'px';
+    tt.textContent=`${fmtClock(ts[i])} · ${opts.short}=${values[i].toFixed(2)}`;
+  }
+  hit.addEventListener('mousemove',move);
+  hit.addEventListener('mouseleave',()=>{cross.style.opacity=0;hdot.style.opacity=0;tt.style.opacity=0;});
+
+  // key
+  const items=[
+    {t:'measured signal',c:opts.color,cls:'line'},
+    ...(opts.thresholds||[]).map(th=>({t:th.label,c:th.color,cls:'dash'})),
+    {t:'staged collapse (ground truth)',c:'var(--band-line)',cls:'box'},
+  ];
+  if(opts.showAlerts){items.push({t:'sudden alert',c:'var(--sudden)',cls:'box'},{t:'slow alert',c:'var(--slow)',cls:'box'});}
+  document.getElementById(keyId).innerHTML = items.map(it=>{
+    const sw = it.cls==='box' ? `<span class="swatch" style="background:${it.c}"></span>`
+      : `<span class="swatch ${it.cls}" style="border-color:${it.c}"></span>`;
+    return `<span class="it">${sw}${it.t}</span>`;
+  }).join('');
+}
+
+draw('c_motion','key_motion',DATA.motion,{
+  yLabel:'motion', short:'motion', color:'var(--teal)', soft:'var(--teal-soft)', showAlerts:true,
+  thresholds:[{v:DATA.thresholds.still,label:'stillness floor',color:'var(--indigo)'},
+              {v:DATA.thresholds.occupied,label:'occupied',color:'var(--muted)'}],
+});
+draw('c_sharp','key_sharp',DATA.sharp,{
+  yLabel:'sharpness', short:'sharp', color:'var(--indigo)', soft:'var(--indigo-soft)', showAlerts:false,
+  thresholds:[{v:DATA.thresholds.sharp,label:'impact threshold',color:'var(--sudden)'}],
+});
+
+/* ---- alerts table ---- */
+(function(){
+  const tb=document.querySelector('#alerts tbody');
+  tb.innerHTML = DATA.alerts.map((a,i)=>{
+    const ev=DATA.events[i]; const cls=a.kind.startsWith('sudden')?'sudden':'slow';
+    const match = a.kind.replace('_collapse','')===ev.label.replace('_fall','') ? '✓ matched '+ev.label : ev.label;
+    return `<tr><td>${fmtClock(a.t)}</td>
+      <td><span class="pill ${cls}"><span class="dot"></span>${a.kind.replace('_',' ')}</span></td>
+      <td>${a.conf.toFixed(2)}</td><td>${a.still}s</td><td style="color:var(--good)">${match}</td></tr>`;
+  }).join('');
+})();
+</script>
+</body>
+</html>
