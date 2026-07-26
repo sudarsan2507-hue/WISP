@@ -31,6 +31,7 @@ def _state_machine(profile: RoomProfile) -> DetectionStateMachine:
         slow_confirm_s=profile.slow_confirm_s,
         recent_activity_s=profile.recent_activity_s,
         debounce_s=profile.debounce_s,
+        min_active_s=profile.min_active_s,
     )
 
 

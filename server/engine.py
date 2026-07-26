@@ -71,6 +71,7 @@ class EngineOptions:
     occupied_abs: Optional[float] = None
     sharp_abs: Optional[float] = None
     confirm_s: float = 8.0                 # live: stillness needed to confirm a sudden collapse
+    min_active_s: float = 3.0              # live: sustained activity required before a collapse counts (false-alarm killer)
     # playback + demo flavour
     speed: float = 3.0                    # fallback playback speed multiplier (live is real-time)
     loop: bool = True                     # loop finite fallback streams (unattended demo)
@@ -392,11 +393,12 @@ class MonitorEngine:
         # radio noise can't walk the state machine into a false collapse.
         self.profile = RoomProfile.fit(
             _ListSource(cal), sample_rate_hz=self.opts.rate_hz,
-            still_pct=10.0, occupied_pct=90.0, sharp_pct=99.9,
+            still_pct=25.0, occupied_pct=80.0, sharp_pct=97.0,
             still_abs=self.opts.still_abs, occupied_abs=self.opts.occupied_abs,
             sharp_abs=self.opts.sharp_abs,
             confirm_s=self.opts.confirm_s, slow_confirm_s=25.0,
             recent_activity_s=12.0, debounce_s=8.0,
+            min_active_s=self.opts.min_active_s,
         )
         self.profile.save(self.opts.profile_path)
         with self._lock:
@@ -451,6 +453,15 @@ class MonitorEngine:
     # -- ingest one window -------------------------------------------------
     def _ingest(self, t: float, feat: dict, state: str, alert) -> None:
         occ = self.profile.occupied_threshold or 1e-9
+        still = self.profile.still_threshold
+        # Display ceiling: spread the bar across the whole movement range (still -> clearly
+        # active), NOT just the narrow still->occupied detection band. When that band is small
+        # (noisy placement), normalizing by it alone snaps the meter 0<->100 with nothing in
+        # between; scaling to ~5x the band above still puts the "occupied" line near a fifth of
+        # the bar and lets real movement climb gradually toward full. The dashboard maps
+        # motion_norm (0..1.6) onto 0..100%, so ceiling -> 1.6 = full bar.
+        ceiling = still + max(occ - still, 1e-9) * 5.0
+        span = max(ceiling - still, 1e-9)
         motion = float(feat["motion_intensity"])
         with self._lock:
             self._last_update = time.time()
@@ -460,7 +471,7 @@ class MonitorEngine:
                 "state": state,
                 "motion": motion,
                 "sharp": float(feat["transient_sharpness"]),
-                "motion_norm": max(0.0, min(motion / occ, 1.6)),
+                "motion_norm": max(0.0, min(1.6 * (motion - still) / span, 1.6)),
             }
             self._history.append(round(self._cur["motion_norm"], 4))
 

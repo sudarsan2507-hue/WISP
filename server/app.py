@@ -97,6 +97,8 @@ def _parse_args(argv=None) -> argparse.Namespace:
                    help="absolute impact/sharpness ceiling (override calibration percentile)")
     p.add_argument("--confirm-s", dest="confirm_s", type=float, default=8.0,
                    help="stillness seconds needed to confirm a sudden collapse (live)")
+    p.add_argument("--min-active-s", dest="min_active_s", type=float, default=3.0,
+                   help="sustained activity required before a collapse counts (live false-alarm killer)")
     p.add_argument("--speed", type=float, default=3.0, help="fallback playback speed (live is real-time)")
     p.add_argument("--no-loop", dest="loop", action="store_false", help="don't loop finite fallback streams")
     p.add_argument("--escalate-s", type=float, default=30.0)
@@ -114,7 +116,7 @@ def main(argv=None) -> None:
         profile_path=a.profile_path, calibrate_s=a.calibrate_s, rate_hz=a.rate_hz,
         smooth_windows=a.smooth_windows,
         still_abs=a.still_abs, occupied_abs=a.occupied_abs, sharp_abs=a.sharp_abs,
-        confirm_s=a.confirm_s,
+        confirm_s=a.confirm_s, min_active_s=a.min_active_s,
         speed=a.speed, loop=a.loop, escalate_s=a.escalate_s, room=a.room, contact=a.contact,
     )
     engine = MonitorEngine(opts).start()

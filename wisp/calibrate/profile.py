@@ -53,6 +53,7 @@ class RoomProfile:
     slow_confirm_s: float = 20.0
     recent_activity_s: float = 15.0
     debounce_s: float = 5.0
+    min_active_s: float = 0.0
 
     @classmethod
     def fit(

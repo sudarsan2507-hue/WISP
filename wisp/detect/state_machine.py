@@ -55,10 +55,12 @@ class DetectionStateMachine:
     slow_confirm_s: float = 20.0
     recent_activity_s: float = 10.0
     debounce_s: float = 5.0
+    min_active_s: float = 0.0        # a collapse requires this much sustained activity first
 
     # ---- internal state
     _state: str = "NORMAL"
     _last_motion_t: Optional[float] = None      # last time we saw "occupied" motion
+    _active_start: Optional[float] = None        # start of the current sustained-activity burst
     _still_since: Optional[float] = None         # when the current stillness began
     _peak_sharp: float = 0.0                     # peak sharpness during the disturbance
     _last_alert_t: Optional[float] = None
@@ -96,6 +98,13 @@ class DetectionStateMachine:
         if moving:
             # motion (re)appeared: remember it, note any sharp disturbance, clear stillness
             if occupied:
+                # start a fresh activity burst if this is the first occupancy or the last one
+                # was long ago; otherwise the burst is ongoing and keeps accumulating.
+                if self._active_start is None or (
+                    self._last_motion_t is not None
+                    and (timestamp - self._last_motion_t) > self.recent_activity_s
+                ):
+                    self._active_start = timestamp
                 self._last_motion_t = timestamp
             if is_anomaly or sharp >= self.sharp_threshold:
                 self._peak_sharp = max(self._peak_sharp, sharp)
@@ -114,12 +123,23 @@ class DetectionStateMachine:
             and (self._still_since - self._last_motion_t) <= self.recent_activity_s
         )
         had_sharp_disturbance = self._peak_sharp >= self.sharp_threshold
+        # a real collapse is preceded by SUSTAINED activity (someone up and moving), not a
+        # 1-second twitch or a lone noise spike. This gate is the false-alarm killer on a
+        # noisy live signal, where brief blips + the room's normal quiet otherwise look
+        # identical to "fell then lay still". Default 0.0 keeps synthetic tests unchanged.
+        active_s = (
+            (self._last_motion_t - self._active_start)
+            if (self._active_start is not None and self._last_motion_t is not None)
+            else 0.0
+        )
+        had_enough_activity = active_s >= self.min_active_s
 
-        # sudden: sharp disturbance then stillness >= confirm_s
-        if had_sharp_disturbance and stillness >= self.confirm_s:
+        # sudden: sustained activity, a sharp disturbance, then stillness >= confirm_s
+        if had_enough_activity and had_sharp_disturbance and stillness >= self.confirm_s:
             return self._confirm(timestamp, stillness)
-        # slow: recently occupied, no sharp disturbance, stillness >= slow_confirm_s
-        if was_recently_occupied and not had_sharp_disturbance and stillness >= self.slow_confirm_s:
+        # slow: sustained recent occupancy, no sharp disturbance, stillness >= slow_confirm_s
+        if (had_enough_activity and was_recently_occupied
+                and not had_sharp_disturbance and stillness >= self.slow_confirm_s):
             return self._confirm(timestamp, stillness)
         return None
 
@@ -130,8 +150,10 @@ class DetectionStateMachine:
         self._last_alert_t = t
         alert = Alert(timestamp=t, kind=kind, confidence=round(confidence, 2), stillness_s=round(stillness, 1))
         self._peak_sharp = 0.0
+        self._active_start = None
         return alert
 
     def _reset_dynamic(self, t: float) -> None:
         self._still_since = None
         self._peak_sharp = 0.0
+        self._active_start = None
