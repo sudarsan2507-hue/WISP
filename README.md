@@ -202,6 +202,11 @@ python server/app.py                 # use the ESP32 if it's streaming, else fal
 
 See [`server/README.md`](server/README.md) for the fallback chain, flags, and HTTP API.
 
+> **Running it live on the two ESP32s?** The full live-system guide —
+> hardware/USB bring-up, the 2-board reader, calibration & detection tuning, board
+> placement, and troubleshooting the radio link — is in
+> [`docs/SENSETHROUGH.md`](docs/SENSETHROUGH.md).
+
 ### Live hardware (after Milestone 1)
 
 Once the RX ESP32 streams CSI to serial, swap the source — nothing downstream changes:
