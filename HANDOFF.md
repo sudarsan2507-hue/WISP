@@ -1,15 +1,15 @@
-# Handoff — where wisp stands and what's next
+# Handoff - where wisp stands and what's next
 
 Snapshot for whoever picks this up next. Everything below is on `main`.
 
 ## TL;DR
 
 The **synthetic-data MVP runs end-to-end today, with zero hardware.** Calibrate a room
-profile, run the one-line alert console, and print the Phase 0 gate metrics — all from
+profile, run the one-line alert console, and print the Phase 0 gate metrics - all from
 `python scripts/*.py`. On the synthetic demo it currently scores **recall 2/2, kinds
 correct 2/2, 0 false alarms/week.** What remains is real: the live serial source (after
-hardware Milestone 1), an optional CSI-Bench validation adapter, and — the actual point
-— weeks of real-room measurement.
+hardware Milestone 1), an optional CSI-Bench validation adapter, and - the actual point
+weeks of real-room measurement.
 
 ## Run it
 
@@ -43,14 +43,14 @@ Example output of `run_live.py`:
 | `wisp/detect/rules.py` | S5.2 | ✅ sudden vs slow |
 | `wisp/detect/state_machine.py` | S6 | ✅ temporal logic + audit log |
 | `wisp/calibrate/profile.py` | S4 | ✅ `RoomProfile.fit/save/load` |
-| `wisp/pipeline.py` | — | ✅ shared `run_detection` loop |
+| `wisp/pipeline.py` | - | ✅ shared `run_detection` loop |
 | `wisp/evaluate/harness.py` | S9 | ✅ recall / FA-per-week / latency |
-| `scripts/{calibrate,run_live,evaluate}.py` | — | ✅ wired, runnable |
+| `scripts/{calibrate,run_live,evaluate}.py` | - | ✅ wired, runnable |
 | `tests/` | S3.7 | ✅ 6 passing (features + state machine) |
-| `wisp/source/csi_bench_source.py` | — | ✅ adapter to replay CSI-Bench `.h5` clips (needs `h5py`) |
-| `wisp/source/serial_source.py` | S1.6 | ✅ live ESP32 reader (pyserial, lazy import) — needs a board to *run*, but written |
-| `scripts/plot_run.py` | — | ✅ saves `run.png` — motion + sharpness + alerts |
-| `tests/` | — | ✅ 20 passing (features, state machine, parser, logger↔replay, model, profile, harness, csi-bench) |
+| `wisp/source/csi_bench_source.py` | - | ✅ adapter to replay CSI-Bench `.h5` clips (needs `h5py`) |
+| `wisp/source/serial_source.py` | S1.6 | ✅ live ESP32 reader (pyserial, lazy import) - needs a board to *run*, but written |
+| `scripts/plot_run.py` | - | ✅ saves `run.png` - motion + sharpness + alerts |
+| `tests/` | - | ✅ 20 passing (features, state machine, parser, logger↔replay, model, profile, harness, csi-bench) |
 
 ## What's genuinely left
 
@@ -71,7 +71,7 @@ Example output of `run_live.py`:
        ...
    ```
    Note this is a real-CSI *code* sanity check, not the gate (see the module docstring).
-   The supervised S5.4 benchmark (investor credibility number) is still separate — GPU,
+   The supervised S5.4 benchmark (investor credibility number) is still separate - GPU,
    ~sub-hour, NOT the shipping model.
 
 ## Tuning knobs (all in one place)
@@ -80,14 +80,14 @@ Example output of `run_live.py`:
 `still_pct=35, occupied_pct=65, sharp_pct=99.5`. Temporal timings
 (`confirm_s, slow_confirm_s, recent_activity_s, debounce_s`) travel on the profile and
 feed the state machine via `pipeline._state_machine`. If real rooms produce false
-alarms, raise `slow_confirm_s` and the percentiles first — that trades a little latency
+alarms, raise `slow_confirm_s` and the percentiles first - that trades a little latency
 for the gate number, which is the right trade.
 
 ## Design reminders (don't undo these)
 
 - **Everything hides behind `CSISource`.** Synthetic → replay → serial are interchangeable.
 - **The state machine is the false-alarm killer.** Never collapse it to single-window
-  thresholding — that's what fails the gate.
+  thresholding - that's what fails the gate.
 - **No GPU / no CSI-Bench for the shipping detector.** IsolationForest trains on *this
   room's* normal in seconds. The gate is a *room* number (false alarms/week), not a
   dataset accuracy.

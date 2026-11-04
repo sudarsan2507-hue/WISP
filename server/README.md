@@ -1,4 +1,4 @@
-# server — SenseThrough live dashboard (demo layer)
+# server - SenseThrough live dashboard (demo layer)
 
 A thin **presentation layer** over the tested `wisp` detection pipeline: a Flask bridge +
 a self-contained dashboard that turns the one-line alert console into a live room monitor
@@ -6,14 +6,14 @@ with a **fall alert + escalation** UI, suitable for a screen-recorded demo.
 
 It is intentionally **separate from the core**. The core stays console-first (see the main
 README); this is the "make it visible for the pitch" layer and does not change any
-detection logic — it consumes `wisp.pipeline.detection_telemetry`, the same path the
+detection logic - it consumes `wisp.pipeline.detection_telemetry`, the same path the
 evaluation harness uses, so the demo can never diverge from what is measured.
 
 ## What it shows
 
 - **MONITORING vs FALL ALERT** hero that flips the whole screen red on a confirmed collapse.
 - An always-visible **source badge**: green **LIVE · ESP32** when a board is streaming, amber
-  **FALLBACK · …** otherwise. The fallback is never silent — it is labelled on screen.
+  **FALLBACK · …** otherwise. The fallback is never silent - it is labelled on screen.
 - A live **activity meter + sparkline**, current room state, and detector thresholds.
 - A cancellable **escalation countdown** ("contacting emergency contact") that resolves to
   *notified* if nobody cancels, or back to monitoring if you press **I'm OK**.
@@ -22,12 +22,12 @@ evaluation harness uses, so the demo can never diverge from what is measured.
 
 On startup the engine walks this chain and reports which rung it landed on:
 
-1. **LIVE ESP32** — if a serial port (auto-detected `/dev/ttyUSB*`/`ttyACM*`, or `--serial`)
+1. **LIVE ESP32** - if a serial port (auto-detected `/dev/ttyUSB*`/`ttyACM*`, or `--serial`)
    actually emits `CSI_DATA` within `--probe-s` seconds. Calibrates on the room's own live
    normal (`--calibrate-s`) if no `room_profile.pkl` exists.
-2. **Real-data replay** — `--csi-bench PATH` (real captured CSI, needs the Kaggle subset) or
+2. **Real-data replay** - `--csi-bench PATH` (real captured CSI, needs the Kaggle subset) or
    `--replay file.csv` (a recorded `RawLogger` log).
-3. **Synthetic demo room** — always available, self-contained, correct. The guaranteed floor.
+3. **Synthetic demo room** - always available, self-contained, correct. The guaranteed floor.
 
 ## Run it (inside the WSL venv, from the repo root)
 
@@ -37,7 +37,7 @@ On startup the engine walks this chain and reports which rung it landed on:
 ```bash
 source ~/wisp-venv/bin/activate
 
-# Guaranteed software demo (no hardware) — amber FALLBACK badge:
+# Guaranteed software demo (no hardware) - amber FALLBACK badge:
 python server/app.py --no-serial --room "Washroom 3B"
 
 # Auto: use the ESP32 if it's streaming, else fall back automatically:
@@ -52,7 +52,7 @@ python server/app.py --no-serial --csi-bench /path/to/FallDetection --room "Wash
 
 Useful flags: `--speed` (fallback playback speed; live is always real-time),
 `--escalate-s` (countdown length), `--no-loop` (play the fallback once), `--port`,
-`--contact "Daughter — Priya"`, `--rate`.
+`--contact "Daughter - Priya"`, `--rate`.
 
 ## HTTP API (for an external dashboard too)
 
@@ -62,7 +62,7 @@ CORS is enabled, so a dashboard you host elsewhere can poll the same endpoints.
 | --- | --- | --- |
 | GET  | `/`        | the dashboard HTML |
 | GET  | `/status`  | JSON snapshot (poll ~2 Hz): mode, source label, room state, alert phase, countdown |
-| POST | `/cancel`  | "I'm OK" — cancel an in-progress escalation |
+| POST | `/cancel`  | "I'm OK" - cancel an in-progress escalation |
 | POST | `/reset`   | clear alert/resolved state |
 | GET  | `/healthz` | liveness |
 
