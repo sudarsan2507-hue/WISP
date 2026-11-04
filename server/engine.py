@@ -24,7 +24,7 @@ import glob
 import threading
 import time
 from collections import Counter, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 from wisp.calibrate.profile import RoomProfile
