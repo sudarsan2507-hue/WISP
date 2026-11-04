@@ -82,42 +82,52 @@ class DetectionStateMachine:
         sharp = features["transient_sharpness"]
 
         # --- debounce: stay quiet after an alert until motion clearly resumes
-        if self._last_alert_t is not None:
-            if motion > self.occupied_threshold and timestamp - self._last_alert_t >= self.debounce_s:
-                self._last_alert_t = None
-                self._reset_dynamic(timestamp)
-                self._transition(timestamp, "NORMAL")
-            else:
-                if motion > self.occupied_threshold:
-                    self._last_motion_t = timestamp
-                return None
+        if self._last_alert_t is not None and self._still_debouncing(timestamp, motion):
+            return None
 
-        moving = motion > self.still_threshold
-        occupied = motion > self.occupied_threshold
-
-        if moving:
-            # motion (re)appeared: remember it, note any sharp disturbance, clear stillness
-            if occupied:
-                # start a fresh activity burst if this is the first occupancy or the last one
-                # was long ago; otherwise the burst is ongoing and keeps accumulating.
-                if self._active_start is None or (
-                    self._last_motion_t is not None
-                    and (timestamp - self._last_motion_t) > self.recent_activity_s
-                ):
-                    self._active_start = timestamp
-                self._last_motion_t = timestamp
-            if is_anomaly or sharp >= self.sharp_threshold:
-                self._peak_sharp = max(self._peak_sharp, sharp)
-                self._transition(timestamp, "DISTURBANCE")
-            self._still_since = None
+        if motion > self.still_threshold:
+            self._on_motion(timestamp, motion, sharp, is_anomaly)
             return None
 
         # --- below the stillness floor: accumulate stillness
         if self._still_since is None:
             self._still_since = timestamp
             self._transition(timestamp, "STILL")
-        stillness = timestamp - self._still_since
+        return self._check_collapse(timestamp, timestamp - self._still_since)
 
+    def _still_debouncing(self, timestamp: float, motion: float) -> bool:
+        """True while the post-alert quiet period holds; re-arms once motion clearly resumes."""
+        if motion > self.occupied_threshold and timestamp - self._last_alert_t >= self.debounce_s:
+            self._last_alert_t = None
+            self._reset_dynamic(timestamp)
+            self._transition(timestamp, "NORMAL")
+            return False
+        if motion > self.occupied_threshold:
+            self._last_motion_t = timestamp
+        return True
+
+    def _on_motion(self, timestamp: float, motion: float, sharp: float, is_anomaly: bool) -> None:
+        """Motion (re)appeared: remember it, note any sharp disturbance, clear stillness."""
+        if motion > self.occupied_threshold:
+            # start a fresh activity burst if this is the first occupancy or the last one
+            # was long ago; otherwise the burst is ongoing and keeps accumulating.
+            if self._active_start is None or (
+                self._last_motion_t is not None
+                and (timestamp - self._last_motion_t) > self.recent_activity_s
+            ):
+                self._active_start = timestamp
+            self._last_motion_t = timestamp
+        if is_anomaly or sharp >= self.sharp_threshold:
+            self._peak_sharp = max(self._peak_sharp, sharp)
+            self._transition(timestamp, "DISTURBANCE")
+        self._still_since = None
+
+    def _active_seconds(self) -> float:
+        if self._active_start is not None and self._last_motion_t is not None:
+            return self._last_motion_t - self._active_start
+        return 0.0
+
+    def _check_collapse(self, timestamp: float, stillness: float) -> Optional[Alert]:
         was_recently_occupied = (
             self._last_motion_t is not None
             and (self._still_since - self._last_motion_t) <= self.recent_activity_s
@@ -127,19 +137,14 @@ class DetectionStateMachine:
         # 1-second twitch or a lone noise spike. This gate is the false-alarm killer on a
         # noisy live signal, where brief blips + the room's normal quiet otherwise look
         # identical to "fell then lay still". Default 0.0 keeps synthetic tests unchanged.
-        active_s = (
-            (self._last_motion_t - self._active_start)
-            if (self._active_start is not None and self._last_motion_t is not None)
-            else 0.0
-        )
-        had_enough_activity = active_s >= self.min_active_s
+        if self._active_seconds() < self.min_active_s:
+            return None
 
         # sudden: sustained activity, a sharp disturbance, then stillness >= confirm_s
-        if had_enough_activity and had_sharp_disturbance and stillness >= self.confirm_s:
+        if had_sharp_disturbance and stillness >= self.confirm_s:
             return self._confirm(timestamp, stillness)
         # slow: sustained recent occupancy, no sharp disturbance, stillness >= slow_confirm_s
-        if (had_enough_activity and was_recently_occupied
-                and not had_sharp_disturbance and stillness >= self.slow_confirm_s):
+        if was_recently_occupied and not had_sharp_disturbance and stillness >= self.slow_confirm_s:
             return self._confirm(timestamp, stillness)
         return None
 
